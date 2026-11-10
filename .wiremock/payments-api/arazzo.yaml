@@ -1,0 +1,355 @@
+arazzo: 1.0.1
+info:
+  title: Cart to pay to refund journeys
+  version: 1.0.0
+  summary: End-to-end journeys across the existing Shopping Cart API and the Payments Demo API.
+sourceDescriptions:
+- name: shopping-cart
+  url: ../shopping-cart-demo/openapi.yaml
+  type: openapi
+- name: payments
+  url: ./openapi.yaml
+  type: openapi
+
+workflows:
+- workflowId: cart-checkout-pay-refund
+  summary: Build a cart, check out, pay, read the status back, then refund in two parts
+  description: |
+    Checkout returns the order total (159.98, major units). The Payments API takes minor units and
+    Arazzo cannot multiply, so the payment amount (15998) is written out here; the checkout step
+    asserts the total it must equal.
+    Each payment and refund event is also POSTed to the webhook.site URL.
+  steps:
+  - stepId: createCart
+    operationId: shopping-cart.createCart
+    requestBody:
+      contentType: application/json
+      payload:
+        customerId: cust-001
+    successCriteria:
+    - condition: $statusCode == 201
+    outputs:
+      cartId: $response.body#/id
+  - stepId: addItem
+    operationId: shopping-cart.addCartItem
+    parameters:
+    - name: cartId
+      in: path
+      value: $steps.createCart.outputs.cartId
+    requestBody:
+      contentType: application/json
+      payload:
+        productId: prod-001
+        quantity: 2
+        unitPrice: 79.99
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/productId == 'prod-001'
+    - condition: $response.body#/quantity == 2
+  - stepId: checkout
+    operationId: shopping-cart.checkoutCart
+    parameters:
+    - name: cartId
+      in: path
+      value: $steps.createCart.outputs.cartId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/status == 'confirmed'
+    - condition: $response.body#/total == 159.98
+    - condition: $response.body#/currency == 'USD'
+    outputs:
+      orderId: $response.body#/orderId
+      total: $response.body#/total
+      currency: $response.body#/currency
+  - stepId: pay
+    operationId: payments.createPayment
+    requestBody:
+      contentType: application/json
+      payload:
+        orderId: $steps.checkout.outputs.orderId
+        amount: 15998
+        currency: $steps.checkout.outputs.currency
+        cardToken: tok_visa_approved
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/status == 'succeeded'
+    - condition: $response.body#/responseCode == '00'
+    - condition: $response.body#/amount == 15998
+    - condition: $response.body#/amountRefunded == 0
+    outputs:
+      paymentId: $response.body#/id
+  - stepId: statusAfterPay
+    operationId: payments.getPayment
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/id == $steps.pay.outputs.paymentId
+    - condition: $response.body#/orderId == $steps.checkout.outputs.orderId
+    - condition: $response.body#/status == 'succeeded'
+  - stepId: partialRefund
+    operationId: payments.createRefund
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    requestBody:
+      contentType: application/json
+      payload:
+        amount: 5000
+        reason: requested_by_customer
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/status == 'succeeded'
+    - condition: $response.body#/amount == 5000
+    - condition: $response.body#/paymentId == $steps.pay.outputs.paymentId
+    outputs:
+      refundId: $response.body#/id
+  - stepId: statusAfterPartialRefund
+    operationId: payments.getPayment
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/status == 'partially_refunded'
+    - condition: $response.body#/amountRefunded == 5000
+  - stepId: refundRemainder
+    operationId: payments.createRefund
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    requestBody:
+      contentType: application/json
+      payload:
+        amount: 10998
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/status == 'succeeded'
+    - condition: $response.body#/amount == 10998
+  - stepId: statusAfterFullRefund
+    operationId: payments.getPayment
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/status == 'refunded'
+    - condition: $response.body#/amountRefunded == 15998
+  - stepId: listRefunds
+    operationId: payments.listPaymentRefunds
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/0/paymentId == $steps.pay.outputs.paymentId
+    - condition: $response.body#/1/paymentId == $steps.pay.outputs.paymentId
+  - stepId: getRefund
+    operationId: payments.getRefund
+    parameters:
+    - name: refundId
+      in: path
+      value: $steps.partialRefund.outputs.refundId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/id == $steps.partialRefund.outputs.refundId
+    - condition: $response.body#/amount == 5000
+    - condition: $response.body#/reason == 'requested_by_customer'
+
+- workflowId: declined-payment
+  summary: A declined card gives a failed payment that cannot be refunded
+  steps:
+  - stepId: payDeclined
+    operationId: payments.createPayment
+    requestBody:
+      contentType: application/json
+      payload:
+        orderId: order-declined-001
+        amount: 2500
+        currency: USD
+        cardToken: tok_insufficient_funds
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/status == 'failed'
+    - condition: $response.body#/responseCode == '51'
+    - condition: $response.body#/responseMessage == 'Insufficient funds'
+    outputs:
+      paymentId: $response.body#/id
+  - stepId: statusFailed
+    operationId: payments.getPayment
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.payDeclined.outputs.paymentId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/status == 'failed'
+  - stepId: refundDeclined
+    operationId: payments.createRefund
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.payDeclined.outputs.paymentId
+    requestBody:
+      contentType: application/json
+      payload:
+        amount: 100
+    successCriteria:
+    - condition: $statusCode == 409
+    - condition: $response.body#/error == 'payment_not_refundable'
+
+- workflowId: over-refund
+  summary: Refunding more than was paid fails and leaves the payment untouched
+  steps:
+  - stepId: pay
+    operationId: payments.createPayment
+    requestBody:
+      contentType: application/json
+      payload:
+        orderId: order-overrefund-001
+        amount: 3000
+        currency: USD
+        cardToken: tok_mastercard_approved
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/status == 'succeeded'
+    outputs:
+      paymentId: $response.body#/id
+  - stepId: refundTooMuch
+    operationId: payments.createRefund
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    requestBody:
+      contentType: application/json
+      payload:
+        amount: 3001
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/status == 'failed'
+    - condition: $response.body#/failureReason == 'amount_exceeds_refundable'
+  - stepId: statusUnchanged
+    operationId: payments.getPayment
+    parameters:
+    - name: paymentId
+      in: path
+      value: $steps.pay.outputs.paymentId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/status == 'succeeded'
+    - condition: $response.body#/amountRefunded == 0
+
+- workflowId: not-found-and-unknown-card
+  summary: Error paths for unknown card tokens and unknown resources
+  steps:
+  - stepId: unknownCard
+    operationId: payments.createPayment
+    requestBody:
+      contentType: application/json
+      payload:
+        orderId: order-x
+        amount: 100
+        currency: USD
+        cardToken: tok_does_not_exist
+    successCriteria:
+    - condition: $statusCode == 422
+    - condition: $response.body#/error == 'unknown_card'
+  - stepId: unknownPayment
+    operationId: payments.getPayment
+    parameters:
+    - name: paymentId
+      in: path
+      value: pay_does_not_exist
+    successCriteria:
+    - condition: $statusCode == 404
+  - stepId: refundUnknownPayment
+    operationId: payments.createRefund
+    parameters:
+    - name: paymentId
+      in: path
+      value: pay_does_not_exist
+    requestBody:
+      contentType: application/json
+      payload:
+        amount: 100
+    successCriteria:
+    - condition: $statusCode == 404
+  - stepId: listRefundsUnknownPayment
+    operationId: payments.listPaymentRefunds
+    parameters:
+    - name: paymentId
+      in: path
+      value: pay_does_not_exist
+    successCriteria:
+    - condition: $statusCode == 404
+  - stepId: unknownRefund
+    operationId: payments.getRefund
+    parameters:
+    - name: refundId
+      in: path
+      value: ref_does_not_exist
+    successCriteria:
+    - condition: $statusCode == 404
+
+- workflowId: checkout-returns-order-total
+  summary: Checkout sums every item in the cart into the order total
+  steps:
+  - stepId: createCart
+    operationId: shopping-cart.createCart
+    requestBody:
+      contentType: application/json
+      payload:
+        customerId: cust-002
+    successCriteria:
+    - condition: $statusCode == 201
+    outputs:
+      cartId: $response.body#/id
+  - stepId: addHeadphones
+    operationId: shopping-cart.addCartItem
+    parameters:
+    - name: cartId
+      in: path
+      value: $steps.createCart.outputs.cartId
+    requestBody:
+      contentType: application/json
+      payload:
+        productId: prod-001
+        quantity: 2
+        unitPrice: 79.99
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/totalPrice == 159.98
+  - stepId: addYogaMat
+    operationId: shopping-cart.addCartItem
+    parameters:
+    - name: cartId
+      in: path
+      value: $steps.createCart.outputs.cartId
+    requestBody:
+      contentType: application/json
+      payload:
+        productId: prod-004
+        quantity: 1
+        unitPrice: 25.99
+    successCriteria:
+    - condition: $statusCode == 201
+    - condition: $response.body#/totalPrice == 25.99
+  - stepId: checkout
+    operationId: shopping-cart.checkoutCart
+    parameters:
+    - name: cartId
+      in: path
+      value: $steps.createCart.outputs.cartId
+    successCriteria:
+    - condition: $statusCode == 200
+    - condition: $response.body#/total == 185.97
+    - condition: $response.body#/currency == 'USD'
+    - condition: $response.body#/cartId == $steps.createCart.outputs.cartId

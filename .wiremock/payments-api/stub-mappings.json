@@ -1,0 +1,497 @@
+{
+  "mappings": [
+    {
+      "name": "Not found - get payment",
+      "request": {
+        "urlPathTemplate": "/payments/{paymentId}",
+        "method": "GET",
+        "customMatcher": {
+          "name": "custom-and-matcher",
+          "parameters": {
+            "matchers": [
+              {
+                "name": "require-state",
+                "parameters": {
+                  "requirements": [
+                    {
+                      "key": "{{request.path.paymentId}}",
+                      "absent": true,
+                      "context": "payments"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "persistent": true,
+      "priority": 1,
+      "id": "a652bde6-2a81-4ed2-af56-ade922bcff43"
+    },
+    {
+      "name": "Not found - create refund (payment missing)",
+      "request": {
+        "urlPathTemplate": "/payments/{paymentId}/refunds",
+        "method": "POST",
+        "customMatcher": {
+          "name": "custom-and-matcher",
+          "parameters": {
+            "matchers": [
+              {
+                "name": "require-state",
+                "parameters": {
+                  "requirements": [
+                    {
+                      "key": "{{request.path.paymentId}}",
+                      "absent": true,
+                      "context": "payments"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "persistent": true,
+      "priority": 1,
+      "id": "6bf897a8-64d4-4095-ab42-459f22a623a0"
+    },
+    {
+      "name": "Not found - list refunds (payment missing)",
+      "request": {
+        "urlPathTemplate": "/payments/{paymentId}/refunds",
+        "method": "GET",
+        "customMatcher": {
+          "name": "custom-and-matcher",
+          "parameters": {
+            "matchers": [
+              {
+                "name": "require-state",
+                "parameters": {
+                  "requirements": [
+                    {
+                      "key": "{{request.path.paymentId}}",
+                      "absent": true,
+                      "context": "payments"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "persistent": true,
+      "priority": 1,
+      "id": "27acdf74-e80a-4cbc-8330-85a31d896c6e"
+    },
+    {
+      "name": "Not found - get refund",
+      "request": {
+        "urlPathTemplate": "/refunds/{refundId}",
+        "method": "GET",
+        "customMatcher": {
+          "name": "custom-and-matcher",
+          "parameters": {
+            "matchers": [
+              {
+                "name": "require-state",
+                "parameters": {
+                  "requirements": [
+                    {
+                      "key": "{{request.path.refundId}}",
+                      "absent": true,
+                      "context": "refunds"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": "{\n  \"error\": \"not_found\",\n  \"message\": \"Resource not found\"\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "persistent": true,
+      "priority": 1,
+      "id": "0d553256-47c8-4128-8db5-b0ef3ae77bed"
+    },
+    {
+      "name": "Create payment (outcome driven by Test Cards data source)",
+      "request": {
+        "urlPathTemplate": "/payments",
+        "method": "POST",
+        "customMatcher": {
+          "name": "custom-and-matcher",
+          "parameters": {
+            "matchers": [
+              {
+                "name": "data-exists",
+                "parameters": {
+                  "id": "xg9vr",
+                  "matcherEnabled": true,
+                  "query": "card_token = '{{jsonPath request.body '$.cardToken'}}'"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": "{{#formatJson}}\n  {{state paymentId context='payments'}}\n{{/formatJson}}",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "persistent": true,
+      "serveEventListeners": [
+        {
+          "name": "change-state",
+          "parameters": {
+            "operations": [
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "paymentId",
+                "value": "pay_{{randomValue type='ALPHANUMERIC' length=10 uppercase=false}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "outcome",
+                "value": "{{data.items.0.payment_status}}"
+              },
+              {
+                "context": "payments",
+                "operation": "SET",
+                "phase": "AFTER_MATCH",
+                "key": "{{paymentId}}",
+                "value": "{{#jsonMerge request.body removeNulls=true}}\n{\n  \"id\": \"{{paymentId}}\",\n  \"status\": \"{{data.items.0.payment_status}}\",\n  \"responseCode\": \"{{data.items.0.response_code}}\",\n  \"responseMessage\": \"{{data.items.0.response_message}}\",\n  \"amountRefunded\": 0,\n  \"createdAt\": \"{{now}}\",\n  \"cardToken\": null\n}\n{{/jsonMerge}}"
+              },
+              {
+                "context": "{{#eq outcome 'succeeded'}}refundable{{else}}not-refundable{{/eq}}",
+                "operation": "SET",
+                "phase": "AFTER_MATCH",
+                "key": "{{paymentId}}",
+                "value": "{\n  \"refundable\": true\n}"
+              }
+            ]
+          }
+        }
+      ],
+      "postServeActions": [
+        {
+          "name": "webhook",
+          "parameters": {
+            "method": "POST",
+            "url": "https://wc-echo.wiremockapi.cloud/webhook/echo",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\n  \"id\": \"evt_{{randomValue type='ALPHANUMERIC' length=12 uppercase=false}}\",\n  \"type\": \"{{data.items.0.webhook_event}}\",\n  \"createdAt\": \"{{now}}\",\n  \"data\": {{state paymentId context='payments'}}\n}"
+          }
+        }
+      ],
+      "id": "51c0ad03-cf56-4a9d-9c88-6c6a21386fef"
+    },
+    {
+      "name": "Create payment - unknown card token",
+      "request": {
+        "urlPathTemplate": "/payments",
+        "method": "POST"
+      },
+      "response": {
+        "status": 422,
+        "body": "{\n  \"error\": \"unknown_card\",\n  \"message\": \"Card token is not recognised\"\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "persistent": true,
+      "priority": 10,
+      "id": "310ac933-36cd-45b0-a135-08d7749c5ac2"
+    },
+    {
+      "name": "Get payment status",
+      "request": {
+        "urlPathTemplate": "/payments/{paymentId}",
+        "method": "GET"
+      },
+      "response": {
+        "status": 200,
+        "body": "{{#formatJson}}\n  {{state request.path.paymentId context='payments'}}\n{{/formatJson}}",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "persistent": true,
+      "id": "9e58ee46-fd7a-436a-9985-d2f5c1b954bf"
+    },
+    {
+      "name": "Create refund - payment not refundable (declined)",
+      "request": {
+        "urlPathTemplate": "/payments/{paymentId}/refunds",
+        "method": "POST",
+        "customMatcher": {
+          "name": "custom-and-matcher",
+          "parameters": {
+            "matchers": [
+              {
+                "name": "require-state",
+                "parameters": {
+                  "requirements": [
+                    {
+                      "key": "{{request.path.paymentId}}",
+                      "absent": true,
+                      "context": "refundable"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": "{\n  \"error\": \"payment_not_refundable\",\n  \"message\": \"Payment was not successful and cannot be refunded\"\n}",
+        "headers": {
+          "Content-Type": "application/json"
+        }
+      },
+      "persistent": true,
+      "priority": 2,
+      "id": "075c9cef-481c-4662-a9f2-71a9a02167a3"
+    },
+    {
+      "name": "Create refund (stateful, partial or full)",
+      "request": {
+        "urlPathTemplate": "/payments/{paymentId}/refunds",
+        "method": "POST"
+      },
+      "response": {
+        "status": 201,
+        "body": "{{#formatJson}}\n  {{state refundId context='refunds'}}\n{{/formatJson}}",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "persistent": true,
+      "serveEventListeners": [
+        {
+          "name": "change-state",
+          "parameters": {
+            "operations": [
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "paymentId",
+                "value": "{{request.path.paymentId}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "refundId",
+                "value": "ref_{{randomValue type='ALPHANUMERIC' length=10 uppercase=false}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "payment",
+                "value": "{{state paymentId context='payments'}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "paymentAmount",
+                "value": "{{jsonPath payment '$.amount'}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "alreadyRefunded",
+                "value": "{{jsonPath payment '$.amountRefunded'}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "newRefunded",
+                "value": "{{math alreadyRefunded '+' (jsonPath request.body '$.amount')}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "exceeds",
+                "value": "{{#if (gt (math newRefunded '-' paymentAmount) 0)}}yes{{else}}no{{/if}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "refundStatus",
+                "value": "{{#eq exceeds 'yes'}}failed{{else}}succeeded{{/eq}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "failureReasonJson",
+                "value": "{{#eq exceeds 'yes'}}\"amount_exceeds_refundable\"{{else}}null{{/eq}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "paymentStatus",
+                "value": "{{#eq exceeds 'yes'}}{{jsonPath payment '$.status'}}{{else}}{{#eq newRefunded paymentAmount}}refunded{{else}}partially_refunded{{/eq}}{{/eq}}"
+              },
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "finalRefunded",
+                "value": "{{#eq exceeds 'yes'}}{{alreadyRefunded}}{{else}}{{newRefunded}}{{/eq}}"
+              },
+              {
+                "context": "refunds",
+                "operation": "SET",
+                "phase": "AFTER_MATCH",
+                "key": "{{refundId}}",
+                "value": "{{#jsonMerge request.body}}\n{\n  \"id\": \"{{refundId}}\",\n  \"paymentId\": \"{{paymentId}}\",\n  \"currency\": \"{{jsonPath payment '$.currency'}}\",\n  \"status\": \"{{refundStatus}}\",\n  \"failureReason\": {{failureReasonJson}},\n  \"createdAt\": \"{{now}}\"\n}\n{{/jsonMerge}}"
+              },
+              {
+                "context": "payment-{{paymentId}}-refunds",
+                "operation": "SET",
+                "phase": "AFTER_MATCH",
+                "key": "{{refundId}}",
+                "value": "{{state refundId context='refunds'}}"
+              },
+              {
+                "context": "payments",
+                "operation": "SET",
+                "phase": "AFTER_MATCH",
+                "key": "{{paymentId}}",
+                "value": "{{#jsonMerge previousValue}}\n{\n  \"status\": \"{{paymentStatus}}\",\n  \"amountRefunded\": {{finalRefunded}}\n}\n{{/jsonMerge}}"
+              }
+            ]
+          }
+        }
+      ],
+      "postServeActions": [
+        {
+          "name": "webhook",
+          "parameters": {
+            "method": "POST",
+            "url": "https://wc-echo.wiremockapi.cloud/webhook/echo",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\n  \"id\": \"evt_{{randomValue type='ALPHANUMERIC' length=12 uppercase=false}}\",\n  \"type\": \"refund.{{refundStatus}}\",\n  \"createdAt\": \"{{now}}\",\n  \"data\": {{state refundId context='refunds'}}\n}"
+          }
+        }
+      ],
+      "id": "ed632a4a-45f3-4cd0-85b3-9dad7f271d41"
+    },
+    {
+      "name": "List refunds for payment",
+      "request": {
+        "urlPathTemplate": "/payments/{paymentId}/refunds",
+        "method": "GET"
+      },
+      "response": {
+        "status": 200,
+        "body": "{{#formatJson}}\n  [{{arrayJoin ',' (listState refundsContext)}}]\n{{/formatJson}}",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "persistent": true,
+      "serveEventListeners": [
+        {
+          "name": "change-state",
+          "parameters": {
+            "operations": [
+              {
+                "context": "local",
+                "operation": "REQUEST_VAR",
+                "phase": "AFTER_MATCH",
+                "key": "refundsContext",
+                "value": "payment-{{request.path.paymentId}}-refunds"
+              }
+            ]
+          }
+        }
+      ],
+      "id": "8e3d1225-c823-4558-aeb3-c3034bd356b0"
+    },
+    {
+      "name": "Get refund",
+      "request": {
+        "urlPathTemplate": "/refunds/{refundId}",
+        "method": "GET"
+      },
+      "response": {
+        "status": 200,
+        "body": "{{#formatJson}}\n  {{state request.path.refundId context='refunds'}}\n{{/formatJson}}",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "transformers": [
+          "response-template"
+        ]
+      },
+      "persistent": true,
+      "id": "ac3911cb-a0a0-44c1-9e85-c4a9d0567070"
+    }
+  ]
+}

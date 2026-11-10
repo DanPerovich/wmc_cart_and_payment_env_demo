@@ -1,0 +1,12 @@
+# WireMock Cloud environment p1z75 (see environment.yaml) groups both services.
+services:
+  payments-api:
+    type: REST
+    name: "Payments Demo API"
+    port: 8080
+    cloud_id: oz63vz
+  shopping-cart-demo:
+    type: REST
+    name: "Shopping Cart API (demo copy)"
+    port: 8081
+    cloud_id: jg92wr

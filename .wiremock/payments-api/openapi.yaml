@@ -1,0 +1,341 @@
+openapi: 3.0.3
+info:
+  title: Payments Demo API
+  version: 1.0.0
+  description: |
+    A stateful payments simulation: **pay -> status -> refund**, with webhook callbacks.
+
+    * Amounts are integers in **minor units** (e.g. `15998` = 159.98).
+    * The outcome of `POST /payments` is driven by `cardToken`, looked up in the
+      "Test Cards" CSV data source. Known tokens: `tok_visa_approved`,
+      `tok_mastercard_approved`, `tok_verve_approved`, `tok_insufficient_funds`,
+      `tok_do_not_honor`, `tok_expired_card`, `tok_suspected_fraud`.
+      Unknown tokens return `422`.
+    * Payment and refund state persists between requests: a payment's `status` and
+      `amountRefunded` change as refunds are issued.
+    * **Webhooks:** every payment and refund event is POSTed to the configured callback URL
+      with the body `{ "id", "type", "createdAt", "data" }`. Event types:
+      `payment.succeeded`, `payment.failed`, `refund.succeeded`, `refund.failed`.
+      `data` is the Payment or Refund object.
+servers:
+- url: https://payments-demo-api.wiremockapi.cloud
+- url: https://oz63vz.wiremockapi.cloud
+tags:
+- name: Payments
+- name: Refunds
+paths:
+  /payments:
+    post:
+      operationId: createPayment
+      summary: Create a payment (authorise and capture)
+      description: Looks the card token up in the Test Cards data source. Approved cards produce a
+        `succeeded` payment, declined cards a `failed` payment. Fires a `payment.succeeded` or
+        `payment.failed` webhook.
+      tags:
+      - Payments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+            example:
+              orderId: order-def789
+              amount: 15998
+              currency: USD
+              cardToken: tok_visa_approved
+      responses:
+        '201':
+          description: Payment created (check `status` for the outcome)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+              example:
+                id: pay_8f3k2d9a
+                orderId: order-def789
+                amount: 15998
+                currency: USD
+                status: succeeded
+                responseCode: '00'
+                responseMessage: Approved or completed successfully
+                amountRefunded: 0
+                createdAt: '2026-11-10T10:00:00Z'
+        '422':
+          description: Unknown card token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: unknown_card
+                message: Card token is not recognised
+  /payments/{paymentId}:
+    get:
+      operationId: getPayment
+      summary: Get payment status
+      tags:
+      - Payments
+      parameters:
+      - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: The payment, including its current status and refunded amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+              example:
+                id: pay_8f3k2d9a
+                orderId: order-def789
+                amount: 15998
+                currency: USD
+                status: partially_refunded
+                responseCode: '00'
+                responseMessage: Approved or completed successfully
+                amountRefunded: 5000
+                createdAt: '2026-11-10T10:00:00Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /payments/{paymentId}/refunds:
+    post:
+      operationId: createRefund
+      summary: Refund a payment, in full or in part
+      description: |
+        Refunds can be issued repeatedly until the payment is fully refunded.
+        * Payment unknown: `404`.
+        * Payment was declined (never captured): `409 payment_not_refundable`.
+        * Amount exceeds what is still refundable: `201` with refund `status: failed` and
+          `failureReason: amount_exceeds_refundable`; the payment is unchanged.
+        Fires a `refund.succeeded` or `refund.failed` webhook.
+      tags:
+      - Refunds
+      parameters:
+      - $ref: '#/components/parameters/PaymentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRefundRequest'
+            example:
+              amount: 5000
+              reason: requested_by_customer
+      responses:
+        '201':
+          description: Refund recorded (check `status` for the outcome)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+              example:
+                id: ref_4m1x7q2b
+                paymentId: pay_8f3k2d9a
+                amount: 5000
+                currency: USD
+                reason: requested_by_customer
+                status: succeeded
+                failureReason: null
+                createdAt: '2026-11-10T10:05:00Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Payment was not captured, so cannot be refunded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: payment_not_refundable
+                message: Payment was not successful and cannot be refunded
+    get:
+      operationId: listPaymentRefunds
+      summary: List the refunds issued against a payment
+      tags:
+      - Refunds
+      parameters:
+      - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Refunds for the payment
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Refund'
+              example:
+              - id: ref_4m1x7q2b
+                paymentId: pay_8f3k2d9a
+                amount: 5000
+                currency: USD
+                reason: requested_by_customer
+                status: succeeded
+                failureReason: null
+                createdAt: '2026-11-10T10:05:00Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /refunds/{refundId}:
+    get:
+      operationId: getRefund
+      summary: Get a refund
+      tags:
+      - Refunds
+      parameters:
+      - name: refundId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: ref_4m1x7q2b
+      responses:
+        '200':
+          description: The refund
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+              example:
+                id: ref_4m1x7q2b
+                paymentId: pay_8f3k2d9a
+                amount: 5000
+                currency: USD
+                reason: requested_by_customer
+                status: succeeded
+                failureReason: null
+                createdAt: '2026-11-10T10:05:00Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  parameters:
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: pay_8f3k2d9a
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: not_found
+            message: Resource not found
+  schemas:
+    CreatePaymentRequest:
+      type: object
+      required:
+      - orderId
+      - amount
+      - currency
+      - cardToken
+      properties:
+        orderId:
+          type: string
+          description: Order ID, e.g. from the Shopping Cart API checkout
+        amount:
+          type: integer
+          minimum: 1
+          description: Amount in minor units
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        cardToken:
+          type: string
+          description: Test card token, see the data source
+    Payment:
+      type: object
+      required:
+      - id
+      - orderId
+      - amount
+      - currency
+      - status
+      - responseCode
+      - responseMessage
+      - amountRefunded
+      - createdAt
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+        status:
+          type: string
+          enum:
+          - succeeded
+          - failed
+          - partially_refunded
+          - refunded
+        responseCode:
+          type: string
+          description: ISO 8583 style response code, 00 = approved
+        responseMessage:
+          type: string
+        amountRefunded:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    CreateRefundRequest:
+      type: object
+      required:
+      - amount
+      properties:
+        amount:
+          type: integer
+          minimum: 1
+          description: Amount to refund in minor units
+        reason:
+          type: string
+    Refund:
+      type: object
+      required:
+      - id
+      - paymentId
+      - amount
+      - currency
+      - status
+      - failureReason
+      - createdAt
+      properties:
+        id:
+          type: string
+        paymentId:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+          - succeeded
+          - failed
+        failureReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      required:
+      - error
+      - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string

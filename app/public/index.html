@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payments demo - cart, pay, refund</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --ink: #1c2330; --muted: #6b7587; --line: #e2e5ea;
+    --accent: #2457d6; --ok: #137a43; --okbg: #e3f5ea; --bad: #b3261e; --badbg: #fbe7e5;
+    --warn: #8a5a00; --warnbg: #fff1d6; --info: #2457d6; --infobg: #e6edfc;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px;
+           background: #111827; color: #fff; }
+  header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  header .links a { color: #9db8ff; margin-left: 16px; text-decoration: none; font-size: 13px; }
+  main { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 16px 20px; align-items: start; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  section.locked { opacity: .45; pointer-events: none; }
+  h2 { margin: 0 0 10px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  h2 .n { background: var(--accent); color: #fff; border-radius: 50%; width: 20px; height: 20px;
+          display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0;
+         border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  button { font: inherit; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 5px 10px;
+           cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .b-ok { background: var(--okbg); color: var(--ok); }
+  .b-bad { background: var(--badbg); color: var(--bad); }
+  .b-warn { background: var(--warnbg); color: var(--warn); }
+  .b-info { background: var(--infobg); color: var(--info); }
+  .big { font-size: 22px; font-weight: 700; }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 2px 8px; margin: 8px 0; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+  .note { margin-top: 8px; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+  .scroll { max-height: 340px; overflow: auto; }
+  details { margin-top: 4px; }
+  summary { cursor: pointer; }
+  pre { margin: 4px 0 0; padding: 8px; background: #0f172a; color: #d6e2ff; border-radius: 6px; overflow: auto;
+        font-size: 12px; max-height: 220px; }
+  .ev { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .ev.current { background: #f2f7ff; margin: 0 -8px; padding: 8px; border-radius: 6px; }
+  .ev.new { animation: flash 1.6s ease-out; }
+  @keyframes flash { from { background: #fff3b0; } to { background: transparent; } }
+  .calls { max-height: 520px; }
+  .call { border-bottom: 1px solid var(--line); }
+  .call-head { display: grid; grid-template-columns: 26px 46px 1fr 34px 50px; gap: 6px; padding: 5px 4px; cursor: pointer;
+               font-family: ui-monospace, monospace; font-size: 12px; align-items: baseline; }
+  .call-head .p { word-break: break-all; }
+  .call-head:hover, .call.open .call-head { background: #f2f7ff; }
+  .call-body { padding: 4px 4px 10px; }
+  .call-body .lbl { font-size: 12px; font-weight: 600; margin-top: 6px; }
+  .st2 { color: var(--ok); } .st4 { color: var(--warn); } .st5 { color: var(--bad); }
+  .reset-status { margin-left: 16px; font-size: 12px; color: #b8c6e8; }
+  .reset-status.bad { color: #ffb4ae; }
+  body.busy main, body.busy .tabs { pointer-events: none; opacity: .55; }
+  .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 20px 0; }
+  .tab { padding: 6px 12px; border-radius: 8px; }
+  .tab.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--infobg); font-weight: 600; }
+  .chip { background: #e8ebf1; color: var(--muted); border-radius: 4px; padding: 0 5px; font-size: 11px; font-family: ui-monospace, monospace; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .dot.off { background: var(--bad); }
+  .dot.warn { background: #e0a100; }
+  .dot.idle { background: #9aa4b5; }
+  #feedTitle { flex-wrap: wrap; row-gap: 2px; }
+  #feedTitle .t { white-space: nowrap; }
+  #feedTitle .target { font-weight: 400; overflow-wrap: anywhere; min-width: 0; }
+  .receiver-note { font-size: 13px; line-height: 1.5; }
+  .receiver-note p { margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Payments demo: cart &rarr; pay &rarr; status &rarr; refund</h1>
+  <div class="links">
+    <a id="lnkWebhook" href="#" target="_blank" rel="noopener" hidden>Webhook log &#8599;</a>
+    <a id="lnkCart" href="#" target="_blank" rel="noopener">Cart API &#8599;</a>
+    <span id="resetStatus" class="reset-status" role="status"></span>
+    <button id="btnReset" style="margin-left:16px" title="Start over: resets the mock APIs' state and request logs, and hides the webhook events">New demo</button>
+    <button id="btnClearHooks" class="danger" style="margin-left:8px" title="Permanently delete every request stored on webhook.site" hidden>Clear webhook.site log</button>
+  </div>
+</header>
+
+<nav id="tabs" class="tabs"></nav>
+
+<main>
+  <div class="col">
+    <section id="shop">
+      <h2><span class="n">1</span> Shop <span class="muted">(Shopping Cart API)</span></h2>
+      <div id="products" class="muted">Loading products&hellip;</div>
+    </section>
+    <section id="cart">
+      <h2><span class="n">2</span> Cart &amp; checkout</h2>
+      <div id="cartBody" class="muted">Your cart is empty.</div>
+      <div class="actions"><button id="btnCheckout" class="primary" disabled>Check out</button>
+        <span id="orderInfo" class="muted"></span></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section id="paySec" class="locked">
+      <h2><span class="n">3</span> Pay <span class="muted">(POST /payments)</span></h2>
+      <div class="kv"><div>Order</div><div id="payOrder">-</div><div>Amount</div><div id="payAmount" class="big">-</div></div>
+      <label class="muted">Test card (from the CSV data source)</label><br>
+      <select id="card" style="width:100%;margin:4px 0 8px"></select>
+      <div class="actions"><button id="btnPay" class="primary">Pay now</button></div>
+      <div id="payNote"></div>
+    </section>
+    <section id="statusSec" class="locked">
+      <h2><span class="n">4</span> Payment status <span class="muted">(GET /payments/{id})</span></h2>
+      <div id="statusBody" class="muted">No payment yet.</div>
+      <div class="actions"><button id="btnStatus">Refresh status</button></div>
+    </section>
+    <section id="refundSec" class="locked">
+      <h2><span class="n">5</span> Refund <span class="muted">(POST /payments/{id}/refunds)</span></h2>
+      <div class="actions" style="margin-top:0">
+        <input id="refundAmt" type="number" min="0.01" step="0.01" style="width:110px" placeholder="amount">
+        <button id="btnRefund" class="primary">Refund this amount</button>
+        <button id="btnRefundAll">Refund remaining</button>
+        <button id="btnOver" class="danger" title="Ask for more than is refundable">Over-refund</button>
+      </div>
+      <div id="refundNote"></div>
+      <div id="refundList" style="margin-top:8px"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section>
+      <h2 id="feedTitle"><span class="dot" id="feedDot"></span><span class="t">Webhook events</span> <span class="muted target">(delivered to <span id="feedTarget">...</span>)</span> <span id="feedStatus" class="muted" style="font-weight:400"></span></h2>
+      <div class="muted" style="margin-bottom:6px">Every payment and refund fires a callback. Newest first.</div>
+      <div id="events" class="scroll"><div class="muted">Waiting for events&hellip;</div></div>
+    </section>
+    <section>
+      <h2>API calls</h2>
+      <div class="muted" style="margin-bottom:6px">Click a call to see the full request and response.</div>
+      <div id="log" class="scroll calls"></div>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

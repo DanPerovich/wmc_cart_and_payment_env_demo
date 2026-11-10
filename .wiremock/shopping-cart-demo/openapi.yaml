@@ -1,0 +1,499 @@
+openapi: 3.0.3
+info:
+  title: Shopping Cart API (demo copy)
+  description: A simple shopping cart API for managing products and shopping carts
+  version: 1.0.0
+servers:
+- url: https://shopping-cart-demo.wiremockapi.cloud
+- url: https://jg92wr.wiremockapi.cloud
+paths:
+  /products:
+    get:
+      operationId: listProducts
+      summary: List all products
+      tags:
+      - Products
+      responses:
+        '200':
+          description: A list of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+              example:
+              - id: "prod-001"
+                name: "Wireless Headphones"
+                description: "High-quality wireless headphones with noise cancellation"
+                price: 79.99
+                stock: 50
+                category: "Electronics"
+  /products/{productId}:
+    get:
+      operationId: getProduct
+      summary: Get a product by ID
+      tags:
+      - Products
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: A product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+              example:
+                id: "prod-001"
+                name: "Wireless Headphones"
+                description: "High-quality wireless headphones with noise cancellation"
+                price: 79.99
+                stock: 50
+                category: "Electronics"
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Product not found"
+  /carts:
+    post:
+      operationId: createCart
+      summary: Create a new shopping cart
+      tags:
+      - Carts
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customerId:
+                  type: string
+                  description: Optional customer identifier
+            example:
+              customerId: "cust-001"
+      responses:
+        '201':
+          description: Cart created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              example:
+                id: "cart-abc123"
+                customerId: "cust-001"
+                status: "active"
+                createdAt: "2026-08-06T10:00:00Z"
+  /carts/{cartId}:
+    get:
+      operationId: getCart
+      summary: Get a cart by ID
+      tags:
+      - Carts
+      parameters:
+      - name: cartId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: A cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+              example:
+                id: "cart-abc123"
+                customerId: "cust-001"
+                status: "active"
+                createdAt: "2026-08-06T10:00:00Z"
+        '404':
+          description: Cart not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Cart not found"
+    delete:
+      operationId: deleteCart
+      summary: Delete a cart
+      tags:
+      - Carts
+      parameters:
+      - name: cartId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Cart deleted
+        '404':
+          description: Cart not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Cart not found"
+  /carts/{cartId}/items:
+    get:
+      operationId: listCartItems
+      summary: List all items in a cart
+      tags:
+      - Cart Items
+      parameters:
+      - name: cartId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: A list of cart items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CartItem'
+              example:
+              - id: "item-xyz456"
+                cartId: "cart-abc123"
+                productId: "prod-001"
+                quantity: 2
+                unitPrice: 79.99
+                totalPrice: 159.98
+        '404':
+          description: Cart not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Cart not found"
+    post:
+      operationId: addCartItem
+      summary: Add an item to a cart
+      tags:
+      - Cart Items
+      parameters:
+      - name: cartId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - productId
+              - quantity
+              - unitPrice
+              properties:
+                productId:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+                unitPrice:
+                  type: number
+                  format: float
+            example:
+              productId: "prod-001"
+              quantity: 2
+              unitPrice: 79.99
+      responses:
+        '201':
+          description: Item added to cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+              example:
+                id: "item-xyz456"
+                cartId: "cart-abc123"
+                productId: "prod-001"
+                quantity: 2
+                unitPrice: 79.99
+                totalPrice: 159.98
+        '404':
+          description: Cart not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Cart not found"
+  /carts/{cartId}/items/{itemId}:
+    put:
+      operationId: updateCartItem
+      summary: Update the quantity of an item in a cart
+      tags:
+      - Cart Items
+      parameters:
+      - name: cartId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - quantity
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+            example:
+              quantity: 3
+      responses:
+        '200':
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+              example:
+                id: "item-xyz456"
+                cartId: "cart-abc123"
+                productId: "prod-001"
+                quantity: 3
+                unitPrice: 79.99
+                totalPrice: 239.97
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Cart item not found"
+    delete:
+      operationId: removeCartItem
+      summary: Remove an item from a cart
+      tags:
+      - Cart Items
+      parameters:
+      - name: cartId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Item removed
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Cart item not found"
+  /carts/{cartId}/checkout:
+    post:
+      operationId: checkoutCart
+      summary: Checkout a cart and create an order
+      tags:
+      - Carts
+      parameters:
+      - name: cartId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Checkout complete, order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+              example:
+                orderId: "order-def789"
+                cartId: "cart-abc123"
+                status: "confirmed"
+                total: 159.98
+                currency: "USD"
+                createdAt: "2026-08-06T10:15:00Z"
+        '404':
+          description: Cart not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "not_found"
+                message: "Cart not found"
+components:
+  schemas:
+    Product:
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - price
+      - stock
+      - category
+      properties:
+        id:
+          type: string
+          example: "prod-001"
+        name:
+          type: string
+          example: "Wireless Headphones"
+        description:
+          type: string
+          example: "High-quality wireless headphones with noise cancellation"
+        price:
+          type: number
+          format: float
+          example: 79.99
+        stock:
+          type: integer
+          example: 50
+        category:
+          type: string
+          example: "Electronics"
+    Cart:
+      type: object
+      required:
+      - id
+      - status
+      - createdAt
+      properties:
+        id:
+          type: string
+          example: "cart-abc123"
+        customerId:
+          type: string
+          nullable: true
+          example: "cust-001"
+        status:
+          type: string
+          enum:
+          - active
+          - checked_out
+          - abandoned
+          example: "active"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-08-06T10:00:00Z"
+    CartItem:
+      type: object
+      required:
+      - id
+      - cartId
+      - productId
+      - quantity
+      - unitPrice
+      - totalPrice
+      properties:
+        id:
+          type: string
+          example: "item-xyz456"
+        cartId:
+          type: string
+          example: "cart-abc123"
+        productId:
+          type: string
+          example: "prod-001"
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        unitPrice:
+          type: number
+          format: float
+          example: 79.99
+        totalPrice:
+          type: number
+          format: float
+          example: 159.98
+    Order:
+      type: object
+      required:
+      - orderId
+      - cartId
+      - status
+      - total
+      - currency
+      - createdAt
+      properties:
+        orderId:
+          type: string
+          example: "order-def789"
+        cartId:
+          type: string
+          example: "cart-abc123"
+        total:
+          type: number
+          format: float
+          description: Order total in major currency units (the sum of the cart items' totalPrice)
+          example: 159.98
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: "USD"
+        status:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - shipped
+          - delivered
+          example: "confirmed"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-08-06T10:15:00Z"
+    Error:
+      type: object
+      required:
+      - error
+      - message
+      properties:
+        error:
+          type: string
+          example: "not_found"
+        message:
+          type: string
+          example: "The requested resource was not found"

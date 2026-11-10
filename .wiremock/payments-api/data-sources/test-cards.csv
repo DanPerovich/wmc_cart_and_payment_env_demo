@@ -1,0 +1,8 @@
+card_token,scenario,payment_status,response_code,response_message,webhook_event
+tok_visa_approved,Visa - approved,succeeded,00,Approved or completed successfully,payment.succeeded
+tok_mastercard_approved,Mastercard - approved,succeeded,00,Approved or completed successfully,payment.succeeded
+tok_verve_approved,Verve - approved,succeeded,00,Approved or completed successfully,payment.succeeded
+tok_insufficient_funds,Declined - insufficient funds,failed,51,Insufficient funds,payment.failed
+tok_do_not_honor,Declined - do not honor,failed,05,Do not honor,payment.failed
+tok_expired_card,Declined - expired card,failed,54,Expired card,payment.failed
+tok_suspected_fraud,Declined - suspected fraud,failed,59,Suspected fraud,payment.failed

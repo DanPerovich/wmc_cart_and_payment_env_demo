@@ -1,0 +1,61 @@
+# Everything about the WireMock Cloud side of the demo that is NOT inside the spec/stub files, so the
+# two mock APIs can be recreated from this repository (automated by ../demo-setup.sh). Contains no secrets.
+# (IDs below are the ones in the current WireMock Cloud org; a recreate produces new IDs.)
+
+environment:
+  name: cart-pay-demo
+  id: p1z75
+  description: "Cart -> pay -> status -> refund demo: Payments Demo API plus a private copy of the Shopping Cart API"
+  # Members cannot be removed from an environment once created, and adopting an existing mock API
+  # into one is irreversible. When recreating, prefer creating the members blank inside the
+  # environment (create_environment with `type: openapi` + `hostname`) and then loading the files.
+  members:
+    payments:      { mock_api: payments-api }
+    shopping-cart: { mock_api: shopping-cart-demo }
+
+mock_apis:
+  payments-api:
+    name: Payments Demo API
+    id: oz63vz
+    hostname: payments-demo-api          # https://payments-demo-api.wiremockapi.cloud
+    type: openapi
+    settings:                            # update_mock_api_settings, settingsType "openapi"
+      validationMode: hard
+      portalEnabled: true
+      generateStubsFromOpenApi: false
+      generateOpenApiFromStubs: false
+      generateDefaultStubs: false
+    files:
+      openapi: payments-api/openapi.yaml
+      stubs: payments-api/stub-mappings.json       # generated: tools/gen_stubs.py (see README)
+      arazzo: payments-api/arazzo.yaml
+    data_sources: [test-cards]
+    webhook_target: https://wc-echo.wiremockapi.cloud/webhook/echo   # baked into the two webhook stubs by gen_stubs.py (WEBHOOK_URL overrides)
+
+  shopping-cart-demo:
+    name: Shopping Cart API (demo copy)
+    id: jg92wr
+    hostname: shopping-cart-demo         # https://shopping-cart-demo.wiremockapi.cloud
+    type: openapi
+    settings:
+      validationMode: hard
+      portalEnabled: true
+      generateStubsFromOpenApi: false
+      generateOpenApiFromStubs: false
+      generateDefaultStubs: false
+    files:
+      openapi: shopping-cart-demo/openapi.yaml
+      stubs: shopping-cart-demo/stub-mappings.json
+    cloned_from: y09z4                   # the shared "Shopping Cart API" (not part of this repo, never modified; re-pull it from WMC if you need the original)
+    changes_vs_original:
+      - "POST /carts/{cartId}/checkout returns total and currency (Order schema + checkout stub)"
+
+data_sources:
+  test-cards:
+    name: Test Cards
+    id: xg9vr
+    type: CSV
+    file: payments-api/data-sources/test-cards.csv
+    columns: [card_token, scenario, payment_status, response_code, response_message, webhook_event]   # all STRING
+    used_by: payments-api    # the POST /payments stub matches on it by ID; a recreated data source has a NEW id,
+                             # so regenerate the stubs with TEST_CARDS_DATA_SOURCE_ID=<new id>

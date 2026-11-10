@@ -1,0 +1,723 @@
+{
+  "mappings" : [ {
+    "id" : "115b1001-3aa9-4a61-8e53-f8d380bde149",
+    "name" : "Not found - cart by cartId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}",
+      "method" : "ANY",
+      "customMatcher" : {
+        "name" : "custom-and-matcher",
+        "parameters" : {
+          "matchers" : [ {
+            "name" : "require-state",
+            "parameters" : {
+              "requirements" : [ {
+                "key" : "{{request.path.cartId}}",
+                "absent" : true,
+                "context" : "carts"
+              } ]
+            }
+          } ]
+        }
+      }
+    },
+    "response" : {
+      "status" : 404,
+      "body" : "{\n  \"error\": \"not_found\",\n  \"message\": \"Cart not found\"\n}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      }
+    },
+    "persistent" : true,
+    "priority" : 2,
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272144009Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        }
+      }
+    }
+  }, {
+    "id" : "14311ef4-571d-4a22-b63f-c6ac4c3df25e",
+    "name" : "Not found - cart items (cart missing)",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/items",
+      "method" : "ANY",
+      "customMatcher" : {
+        "name" : "custom-and-matcher",
+        "parameters" : {
+          "matchers" : [ {
+            "name" : "require-state",
+            "parameters" : {
+              "requirements" : [ {
+                "key" : "{{request.path.cartId}}",
+                "absent" : true,
+                "context" : "carts"
+              } ]
+            }
+          } ]
+        }
+      }
+    },
+    "response" : {
+      "status" : 404,
+      "body" : "{\n  \"error\": \"not_found\",\n  \"message\": \"Cart not found\"\n}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      }
+    },
+    "persistent" : true,
+    "priority" : 2,
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272117019Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        }
+      }
+    }
+  }, {
+    "id" : "3d247f54-999e-41cb-a32d-fab4f7720603",
+    "name" : "Not found - cart item by itemId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/items/{itemId}",
+      "method" : "ANY",
+      "customMatcher" : {
+        "name" : "custom-and-matcher",
+        "parameters" : {
+          "matchers" : [ {
+            "name" : "require-state",
+            "parameters" : {
+              "requirements" : [ {
+                "key" : "{{request.path.itemId}}",
+                "absent" : true,
+                "context" : "cart-{{request.path.cartId}}-items"
+              } ]
+            }
+          } ]
+        }
+      }
+    },
+    "response" : {
+      "status" : 404,
+      "body" : "{\n  \"error\": \"not_found\",\n  \"message\": \"Cart item not found\"\n}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      }
+    },
+    "persistent" : true,
+    "priority" : 2,
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272074199Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        }
+      }
+    }
+  }, {
+    "id" : "280acbe2-c6c4-418c-ba2e-ea75025435b2",
+    "name" : "Not found - checkout (cart missing)",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/checkout",
+      "method" : "POST",
+      "customMatcher" : {
+        "name" : "custom-and-matcher",
+        "parameters" : {
+          "matchers" : [ {
+            "name" : "require-state",
+            "parameters" : {
+              "requirements" : [ {
+                "key" : "{{request.path.cartId}}",
+                "absent" : true,
+                "context" : "carts"
+              } ]
+            }
+          } ]
+        }
+      }
+    },
+    "response" : {
+      "status" : 404,
+      "body" : "{\n  \"error\": \"not_found\",\n  \"message\": \"Cart not found\"\n}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      }
+    },
+    "persistent" : true,
+    "priority" : 2,
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.271997069Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        }
+      }
+    }
+  }, {
+    "id" : "4e7c08aa-c0f8-4677-8c15-e7cafc799e65",
+    "name" : "List products",
+    "request" : {
+      "urlPathTemplate" : "/products",
+      "method" : "GET",
+      "customMatcher" : {
+        "name" : "custom-and-matcher",
+        "parameters" : {
+          "matchers" : [ {
+            "name" : "data-exists",
+            "parameters" : {
+              "id" : "p1ed5",
+              "matcherEnabled" : false,
+              "query" : ""
+            }
+          } ]
+        }
+      }
+    },
+    "response" : {
+      "status" : 200,
+      "body" : "{{#formatJson}}\n[\n  {{~#arrayJoin ',' data.items as |product|~}}\n  {\n    \"id\": \"{{product.id}}\",\n    \"name\": \"{{product.name}}\",\n    \"description\": \"{{product.description}}\",\n    \"price\": {{product.price}},\n    \"stock\": {{product.stock}},\n    \"category\": \"{{product.category}}\"\n  }\n  {{~/arrayJoin~}}\n]\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.27218744Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        }
+      }
+    }
+  }, {
+    "id" : "b4c2d8ec-879b-47ad-992b-75609cb46fc9",
+    "name" : "Get product by productId",
+    "request" : {
+      "urlPathTemplate" : "/products/{productId}",
+      "method" : "GET",
+      "customMatcher" : {
+        "name" : "custom-and-matcher",
+        "parameters" : {
+          "matchers" : [ {
+            "name" : "data-exists",
+            "parameters" : {
+              "id" : "p1ed5",
+              "matcherEnabled" : true,
+              "query" : "id = '{{request.path.productId}}'"
+            }
+          } ]
+        }
+      }
+    },
+    "response" : {
+      "status" : 200,
+      "body" : "{{#formatJson}}\n  {{~#arrayJoin '' data.items as |product|~}}\n  {\n    \"id\": \"{{product.id}}\",\n    \"name\": \"{{product.name}}\",\n    \"description\": \"{{product.description}}\",\n    \"price\": {{product.price}},\n    \"stock\": {{product.stock}},\n    \"category\": \"{{product.category}}\"\n  }\n  {{~/arrayJoin~}}\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.27217774Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        }
+      }
+    }
+  }, {
+    "id" : "50ef9e74-ac65-434b-ab15-04a0fee33371",
+    "name" : "Create cart",
+    "request" : {
+      "urlPathTemplate" : "/carts",
+      "method" : "POST"
+    },
+    "response" : {
+      "status" : 201,
+      "body" : "{{#formatJson}}\n  {{state id context=collectionContext}}\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "id",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{randomValue type='UUID'}}"
+        }, {
+          "context" : "local",
+          "key" : "collectionContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "carts"
+        }, {
+          "context" : "{{collectionContext}}",
+          "key" : "{{id}}",
+          "operation" : "SET",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{#jsonMerge request.body}}\n{\n  \"id\": \"{{id}}\",\n  \"status\": \"active\",\n  \"createdAt\": \"2026-08-06T00:00:00Z\"\n}\n{{/jsonMerge}}"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272157059Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:32:20.267510589Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "321c7ddb-cd1e-4705-9093-fe251dc1f5d4",
+    "name" : "Get cart by cartId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}",
+      "method" : "GET"
+    },
+    "response" : {
+      "status" : 200,
+      "body" : "{{#formatJson}}\n  {{state id context=collectionContext}}\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "id",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.cartId}}"
+        }, {
+          "context" : "local",
+          "key" : "collectionContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "carts"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272134999Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:32:20.267458387Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "a8147cce-9439-48cf-b348-ebbf4eb12b10",
+    "name" : "Delete cart by cartId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}",
+      "method" : "DELETE"
+    },
+    "response" : {
+      "status" : 204
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "id",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.cartId}}"
+        }, {
+          "context" : "local",
+          "key" : "collectionContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "carts"
+        }, {
+          "context" : "{{collectionContext}}",
+          "key" : "{{id}}",
+          "operation" : "DELETE",
+          "phase" : "AFTER_MATCH"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272126519Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:32:20.267396991Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "d46d7c1e-d228-4042-9a87-35c91850d37a",
+    "name" : "List cart items by cartId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/items",
+      "method" : "GET"
+    },
+    "response" : {
+      "status" : 200,
+      "body" : "{{#formatJson}}\n  [{{arrayJoin ',' (listState itemsContext)}}]\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "cartId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.cartId}}"
+        }, {
+          "context" : "local",
+          "key" : "itemsContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "cart-{{cartId}}-items"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272107519Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:32:20.267343799Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "240461c9-49da-4ae4-bad2-92454423826c",
+    "name" : "Add item to cart",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/items",
+      "method" : "POST"
+    },
+    "response" : {
+      "status" : 201,
+      "body" : "{{#formatJson}}\n  {{state itemId context=itemsContext}}\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "cartId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.cartId}}"
+        }, {
+          "context" : "local",
+          "key" : "itemId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{randomValue type='UUID'}}"
+        }, {
+          "context" : "local",
+          "key" : "itemsContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "cart-{{cartId}}-items"
+        }, {
+          "context" : "{{itemsContext}}",
+          "key" : "{{itemId}}",
+          "operation" : "SET",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{#jsonMerge request.body}}\n{\n  \"id\": \"{{itemId}}\",\n  \"cartId\": \"{{cartId}}\",\n  \"totalPrice\": {{math (jsonPath request.body '$.quantity') '*' (jsonPath request.body '$.unitPrice')}}\n}\n{{/jsonMerge}}"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272092279Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:32:20.267287942Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "876ffc34-798a-4e4f-9e3c-e21d904152ac",
+    "name" : "Update cart item by itemId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/items/{itemId}",
+      "method" : "PUT"
+    },
+    "response" : {
+      "status" : 200,
+      "body" : "{{#formatJson}}\n  {{state itemId context=itemsContext}}\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "cartId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.cartId}}"
+        }, {
+          "context" : "local",
+          "key" : "itemId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.itemId}}"
+        }, {
+          "context" : "local",
+          "key" : "itemsContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "cart-{{cartId}}-items"
+        }, {
+          "context" : "local",
+          "key" : "unitPrice",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{jsonPath (state itemId context=itemsContext) '$.unitPrice'}}"
+        }, {
+          "context" : "{{itemsContext}}",
+          "key" : "{{itemId}}",
+          "operation" : "SET",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{#jsonMerge previousValue}}\n{\n  \"quantity\": {{jsonPath request.body '$.quantity'}},\n  \"totalPrice\": {{math (jsonPath request.body '$.quantity') '*' unitPrice}}\n}\n{{/jsonMerge}}"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272063789Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:32:20.267211092Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "6a64d669-6bca-43e9-8079-fc9cb682aa0e",
+    "name" : "Remove cart item by itemId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/items/{itemId}",
+      "method" : "DELETE"
+    },
+    "response" : {
+      "status" : 204
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "cartId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.cartId}}"
+        }, {
+          "context" : "local",
+          "key" : "itemId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.itemId}}"
+        }, {
+          "context" : "local",
+          "key" : "itemsContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "cart-{{cartId}}-items"
+        }, {
+          "context" : "{{itemsContext}}",
+          "key" : "{{itemId}}",
+          "operation" : "DELETE",
+          "phase" : "AFTER_MATCH"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272049829Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:32:20.267140635Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "4955e354-6a48-4315-9318-cb0ad1a41ffb",
+    "name" : "Checkout cart by cartId",
+    "request" : {
+      "urlPathTemplate" : "/carts/{cartId}/checkout",
+      "method" : "POST"
+    },
+    "response" : {
+      "status" : 200,
+      "body" : "{{#formatJson}}\n  {{state orderId context=orderContext}}\n{{/formatJson}}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      },
+      "transformers" : [ "response-template" ]
+    },
+    "persistent" : true,
+    "serveEventListeners" : [ {
+      "name" : "change-state",
+      "parameters" : {
+        "operations" : [ {
+          "context" : "local",
+          "key" : "cartId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{request.path.cartId}}"
+        }, {
+          "context" : "local",
+          "key" : "orderId",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{randomValue type='UUID'}}"
+        }, {
+          "context" : "local",
+          "key" : "orderContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "orders"
+        }, {
+          "context" : "local",
+          "key" : "itemsContext",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "cart-{{cartId}}-items"
+        }, {
+          "context" : "local",
+          "key" : "itemsJson",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "[{{arrayJoin ',' (listState itemsContext)}}]"
+        }, {
+          "context" : "local",
+          "key" : "total",
+          "operation" : "REQUEST_VAR",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{val 0 assign='sum'}}{{#each (parseJson itemsJson) as |item|}}{{val (math sum '+' item.totalPrice) assign='sum'}}{{/each}}{{sum}}"
+        }, {
+          "context" : "carts",
+          "key" : "{{cartId}}",
+          "operation" : "SET",
+          "phase" : "AFTER_MATCH",
+          "value" : "{{#jsonMerge previousValue}}\n{\n  \"status\": \"checked_out\"\n}\n{{/jsonMerge}}"
+        }, {
+          "context" : "{{orderContext}}",
+          "key" : "{{orderId}}",
+          "operation" : "SET",
+          "phase" : "AFTER_MATCH",
+          "value" : "{\n  \"orderId\": \"{{orderId}}\",\n  \"cartId\": \"{{cartId}}\",\n  \"status\": \"confirmed\",\n  \"total\": {{total}},\n  \"currency\": \"USD\",\n  \"createdAt\": \"2026-08-06T00:00:00Z\"\n}"
+        } ]
+      }
+    } ],
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.264843024Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-11-10T13:56:01.596847226Z",
+          "via" : "SYSTEM"
+        }
+      }
+    }
+  }, {
+    "id" : "4a56effb-2dde-44e4-ac84-c6865930faef",
+    "name" : "Get product by productId - not found",
+    "request" : {
+      "urlPathTemplate" : "/products/{productId}",
+      "method" : "GET"
+    },
+    "response" : {
+      "status" : 404,
+      "body" : "{\n  \"error\": \"not_found\",\n  \"message\": \"Product not found\"\n}",
+      "headers" : {
+        "Content-Type" : "application/json"
+      }
+    },
+    "persistent" : true,
+    "priority" : 10,
+    "metadata" : {
+      "mocklab" : {
+        "created" : {
+          "at" : "2026-08-06T07:03:04.272165749Z",
+          "via" : "IMPORT",
+          "by" : "oz6jlq"
+        },
+        "updated" : {
+          "at" : "2026-08-06T07:03:44.999949276Z",
+          "via" : "ADMIN_API",
+          "by" : "oz6jlq"
+        }
+      }
+    }
+  } ]
+}
