@@ -27,9 +27,12 @@ const dotEnvLoaded = loadDotEnv(path.join(__dirname, ".env"));
 
 const PORT = process.env.PORT || 8787;
 const CONFIG = {
-  paymentsUrl: process.env.PAYMENTS_URL || "https://payments-demo-api.wiremockapi.cloud",
-  cartUrl: process.env.CART_URL || "https://shopping-cart-demo.wiremockapi.cloud",
+  // The demo mocks are provisioned per user (./demo-setup.sh writes these into app/.env). There are
+  // deliberately no built-in defaults: a default would point at someone else's (or a deleted) mock.
+  paymentsUrl: (process.env.PAYMENTS_URL || "").replace(/\/+$/, ""),
+  cartUrl: (process.env.CART_URL || "").replace(/\/+$/, ""),
 };
+CONFIG.configured = Boolean(CONFIG.paymentsUrl && CONFIG.cartUrl);
 
 // ---- Webhook receiver ----------------------------------------------------------------------
 // The Payments API mock delivers its webhooks to WEBHOOK_URL (baked into its stubs when it is
@@ -80,12 +83,15 @@ async function webhookToken() {
 const WMC_API_KEY = process.env.WMC_API_KEY || "";
 const WMC_API_BASE = (process.env.WMC_API_BASE || "https://api.wiremock.cloud").replace(/\/+$/, "");
 const MOCKS_TO_RESET = [
-  { name: "Payments API", id: process.env.PAYMENTS_MOCK_API_ID || "oz63vz" },
-  { name: "Shopping Cart API (demo copy)", id: process.env.CART_MOCK_API_ID || "jg92wr" },
+  { name: "Payments API", id: process.env.PAYMENTS_MOCK_API_ID || "" },
+  { name: "Shopping Cart API (demo copy)", id: process.env.CART_MOCK_API_ID || "" },
 ];
 // The original shared cart mock must never be reset by this demo, whatever the configuration says.
 const PROTECTED_MOCK_IDS = new Set(["y09z4"]);
-CONFIG.canResetMocks = Boolean(WMC_API_KEY);
+const MOCK_IDS_CONFIGURED = MOCKS_TO_RESET.every((m) => m.id);
+CONFIG.canResetMocks = Boolean(WMC_API_KEY) && MOCK_IDS_CONFIGURED;
+// Why "New demo" cannot reset the mocks (the page words it): no key, or no mocks configured.
+CONFIG.resetBlocker = !WMC_API_KEY ? "no-key" : !MOCK_IDS_CONFIGURED ? "not-configured" : null;
 
 const PUBLIC = path.join(__dirname, "public");
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
@@ -160,6 +166,7 @@ async function resetMockApis(req) {
   const denied = guardMutation(req);
   if (denied) return denied;
   if (!WMC_API_KEY) return { code: 400, body: { error: "needs-wmc-api-key" } };
+  if (!MOCK_IDS_CONFIGURED) return { code: 400, body: { error: "not-configured: set PAYMENTS_MOCK_API_ID and CART_MOCK_API_ID (./demo-setup.sh writes them)" } };
   const blocked = MOCKS_TO_RESET.find((m) => PROTECTED_MOCK_IDS.has(m.id));
   if (blocked) return { code: 400, body: { error: `refusing to reset protected mock API ${blocked.id}` } };
   const auth = `Token ${WMC_API_KEY}`;
@@ -198,7 +205,7 @@ async function configForPage() {
     webhookViewUrl = token ? `https://webhook.site/#!/view/${token}` : "https://webhook.site/";
   } else if (WEBHOOK_MODE === "echo") {
     const payments = MOCKS_TO_RESET[0].id;
-    webhookViewUrl = `https://app.wiremock.cloud/mock-apis/${payments}/requests`;
+    webhookViewUrl = payments ? `https://app.wiremock.cloud/mock-apis/${payments}/requests` : null;
   }
   return { ...CONFIG, webhookViewUrl };
 }
@@ -242,5 +249,8 @@ http
     const modeText = { site: "readable and clearable (webhook.site API key set)", "site-no-key": "delivered, but not readable here (no WEBHOOK_API_KEY)",
       echo: "delivered to the WireMock Cloud echo service (not readable here; see the Payments mock's request log)", other: "delivered, but not readable here" }[WEBHOOK_MODE];
     console.log(`Webhook target: ${WEBHOOK_URL} -> ${modeText}`);
+    console.log(CONFIG.configured
+      ? `Mocks: payments ${CONFIG.paymentsUrl} | cart ${CONFIG.cartUrl}`
+      : "Mocks: NOT configured. Run ./demo-setup.sh (it writes PAYMENTS_URL, CART_URL and the mock IDs into app/.env) or set them yourself.");
     console.log(`WireMock Cloud API key for "New demo" mock reset: ${WMC_API_KEY ? "set" : "NOT set (needs WMC_API_KEY)"}`);
   });

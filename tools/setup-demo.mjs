@@ -4,7 +4,8 @@
 //   ./demo-setup.sh                       provision + configure + start (Ctrl+C stops the app)
 //   ./demo-setup.sh --verify              ...and run the Arazzo journeys against the new mocks first
 //   ./demo-setup.sh --no-start            provision + configure only
-//   ./demo-setup.sh --teardown            delete the environment + data source created by the last run
+//   ./demo-setup.sh --teardown            delete the environment + data source created by the last run and
+//                                         restore the env file lines that run wrote
 //
 // What it does (all via the WireMock Cloud REST API, authenticated with WMC_API_KEY):
 //   1. creates an environment with two blank mock APIs (payments, shopping-cart) and fresh hostnames
@@ -38,7 +39,7 @@ const HELP = `Usage: ./demo-setup.sh [options]
   --env-file <path>     env file to read and update (default: app/.env)
   --keep-previous       proceed even if a previous run's environment is still recorded (it is archived, not deleted)
   --keep-on-failure     do not delete what this run created if a step fails
-  --teardown            delete the environment and data source recorded by the last run, then exit
+  --teardown            delete the environment and data source recorded by the last run, restore the env file, then exit
   -h, --help`;
 
 const args = { name: null, verify: false, start: true, restart: false, port: null, webhookUrl: null,
@@ -79,29 +80,38 @@ function parseEnv(text) {
   return out;
 }
 
-// Set KEY=VALUE lines in an env file: replace an existing active line, otherwise append.
-// Everything else (comments, other keys, secrets) is preserved byte for byte.
+// Set KEY=VALUE lines in an env file: replace an existing active line, otherwise append. A value of
+// null REMOVES the line instead. Everything else (comments, other keys, secrets) is preserved byte for
+// byte. Returns [key, previousRawValueOrNull, newValueOrNull] for every key it changed.
+const SETUP_HEADER = "# --- written by tools/setup-demo.mjs ---";
 function updateEnvFile(file, updates) {
   const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
   const lines = text === "" ? [] : text.split("\n");
   const changed = [];
   const pending = { ...updates };
-  const next = lines.map((line) => {
+  const next = [];
+  for (const line of lines) {
     const m = line.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)(.*)$/);
     if (m && !line.trim().startsWith("#") && m[2] in pending) {
       const v = pending[m[2]];
       delete pending[m[2]];
       changed.push([m[2], m[4].trim(), v]);
-      return `${m[1]}${m[2]}${m[3]}${v}`;
-    }
-    return line;
-  });
-  const added = Object.entries(pending);
+      if (v !== null) next.push(`${m[1]}${m[2]}${m[3]}${v}`); // null: drop the line
+    } else next.push(line);
+  }
+  const added = Object.entries(pending).filter(([, v]) => v !== null);
   if (added.length) {
     while (next.length && next[next.length - 1] === "") next.pop();
     if (next.length) next.push("");
-    if (!text.includes("written by tools/setup-demo.mjs")) next.push("# --- written by tools/setup-demo.mjs ---");
+    if (!next.includes(SETUP_HEADER)) next.push(SETUP_HEADER);
     for (const [k, v] of added) { next.push(`${k}=${v}`); changed.push([k, null, v]); }
+    next.push("");
+  }
+  // If removals left our header with nothing under it, remove the header (and the blank line before it).
+  const h = next.indexOf(SETUP_HEADER);
+  if (h !== -1 && next.slice(h + 1).every((l) => l.trim() === "")) {
+    next.splice(h);
+    while (next.length && next[next.length - 1] === "") next.pop();
     next.push("");
   }
   fs.writeFileSync(file, next.join("\n"));
@@ -158,9 +168,9 @@ async function deleteCreated(state) {
   }
 }
 
-// New hostnames take a while to resolve after creation (about a minute or more in practice), so every
+// New hostnames take a while to resolve after creation (anywhere from a second to several minutes in practice), so every
 // call to a fresh mock has to wait until it answers. Any HTTP status counts as "reachable".
-async function waitReachable(label, url, timeoutMs = 300000) {
+async function waitReachable(label, url, timeoutMs = 600000) {
   const t0 = Date.now();
   let last = "";
   for (let n = 0; Date.now() - t0 < timeoutMs; n++) {
@@ -183,6 +193,32 @@ function listenerPid(port) {
   return r.status === 0 ? r.stdout.trim().split("\n")[0] : "";
 }
 
+// ------------------------------------------------------------------ restoring the env file on teardown
+// Undo what setup wrote to the env file: put back the previous value of each key (or remove the key if
+// setup added it). A key is only touched while it still holds the value setup wrote, so anything you
+// edited since is left alone. State files from older runs have no change list, so for those the four
+// URL/ID lines are removed when they still match the recorded environment.
+function restoreEnvFile(file, state) {
+  if (!fs.existsSync(file)) return [`${file} no longer exists, nothing to restore`];
+  const plan = state.envChanges || [
+    { key: "PAYMENTS_URL", previous: null, written: state.paymentsUrl },
+    { key: "CART_URL", previous: null, written: state.cartUrl },
+    { key: "PAYMENTS_MOCK_API_ID", previous: null, written: state.paymentsMockApiId },
+    { key: "CART_MOCK_API_ID", previous: null, written: state.cartMockApiId },
+  ];
+  const current = parseEnv(fs.readFileSync(file, "utf8"));
+  const updates = {}, report = [];
+  for (const c of plan) {
+    if (!c.written) continue;
+    if (current[c.key] === c.written) {
+      updates[c.key] = c.previous;
+      report.push(`${c.key}: ${c.previous === null ? "removed" : `restored to ${c.previous || "(empty)"}`}`);
+    } else report.push(`${c.key}: left as it is (it no longer holds the value setup wrote)`);
+  }
+  updateEnvFile(file, updates);
+  return report;
+}
+
 // ------------------------------------------------------------------ teardown
 if (args.teardown) {
   if (!API_KEY) die("WMC_API_KEY is not set (environment or app/.env)");
@@ -190,8 +226,11 @@ if (args.teardown) {
   const state = readJson(STATE_FILE);
   log(`Tearing down the environment recorded by the last setup run:\n  environment ${state.environmentName} (${state.environmentId})\n  data source ${state.dataSourceId}`);
   await deleteCreated(state);
+  const envFile = state.envFile || args.envFile;
+  log(`\nRestoring ${envFile.startsWith(ROOT + path.sep) ? path.relative(ROOT, envFile) : envFile}:`);
+  restoreEnvFile(envFile, state).forEach((l) => ok(l));
   fs.rmSync(STATE_FILE);
-  log("\nDone. Note: app/.env still points at the deleted mocks; run ./demo-setup.sh again to provision a new set.");
+  log("\nDone. Run ./demo-setup.sh to provision a new set.");
   process.exit(0);
 }
 
@@ -308,23 +347,49 @@ async function main() {
   }
   ok(`payments stubs point at data source ${ds.id}${hookRefs ? `, webhook target ${webhookUrl}` : ""}`);
 
-  step("Waiting for the new hostnames to become reachable (DNS for new names takes a minute or two)");
+  step("Waiting for the new hostnames to become reachable (DNS for new names takes from a few seconds to several minutes)");
   const tWait = Date.now();
   await waitReachable("the payments mock", payUrl);
   await waitReachable("the shopping-cart mock", cartUrl);
   ok(`both reachable after ${Math.round((Date.now() - tWait) / 1000)}s`);
 
   step("Smoke test");
-  const get = async (url, init) => { const r = await fetch(url, init); return { status: r.status, body: await r.text() }; };
-  let r = await get(`${cartUrl}/products`);
-  if (r.status !== 200) throw new Error(`GET ${cartUrl}/products -> ${r.status}`);
-  ok(`cart API serves ${JSON.parse(r.body).length} products`);
-  r = await get(`${payUrl}/payments/pay_does_not_exist`);
-  if (r.status !== 404) throw new Error(`GET /payments/pay_does_not_exist -> ${r.status}, expected 404`);
-  ok("payments API answers 404 for an unknown payment (stubs loaded)");
-  r = await get(`${payUrl}/payments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: "smoke", amount: 1, currency: "USD", cardToken: "tok_not_in_the_csv" }) });
-  if (r.status !== 422) throw new Error(`POST /payments with an unknown card -> ${r.status}, expected 422`);
-  ok("payments API rejects an unknown card token with 422");
+  const get = async (url, init) => {
+    const res = await fetch(url, init);
+    return { status: res.status, body: await res.text(), matched: res.headers.get("matched-stub-name") || "(none)" };
+  };
+  // A freshly created mock can briefly answer from a not-yet-settled state, so each check is retried for
+  // up to a minute before it counts as a failure; a failure reports which stub answered and what it said.
+  const expectEventually = async (what, request, expected, timeoutMs = 60000) => {
+    const t0 = Date.now();
+    let res, tries = 0;
+    for (;;) {
+      res = await request();
+      tries++;
+      if (res.status === expected) return tries;
+      if (Date.now() - t0 > timeoutMs) break;
+      await sleep(3000);
+    }
+    throw new Error(`${what} -> HTTP ${res.status}, expected ${expected} (still wrong after ${tries} attempts over ${Math.round((Date.now() - t0) / 1000)}s).\n` +
+      `  answered by stub: ${res.matched}\n  response body: ${res.body.slice(0, 300).replace(/\s+/g, " ")}`);
+  };
+  const note = (tries) => (tries > 1 ? ` (after ${tries} attempts: the new mock needed a few seconds)` : "");
+  let t = await expectEventually(`GET ${cartUrl}/products`, () => get(`${cartUrl}/products`), 200);
+  ok(`cart API serves its products${note(t)}`);
+  t = await expectEventually("GET /payments/pay_does_not_exist", () => get(`${payUrl}/payments/pay_does_not_exist`), 404);
+  ok(`payments API answers 404 for an unknown payment (stubs loaded)${note(t)}`);
+  t = await expectEventually("POST /payments with an unknown card", () => get(`${payUrl}/payments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: "smoke", amount: 1, currency: "USD", cardToken: "tok_not_in_the_csv" }) }), 422);
+  ok(`payments API rejects an unknown card token with 422${note(t)}`);
+
+  // Leave the mocks pristine whatever the checks above did (a bad probe could have created a payment).
+  const resetMocks = async () => {
+    for (const m of [pay, cart]) {
+      await api("POST", `/v1/mock-apis/${m.id}/scenarios/reset`);
+      await api("DELETE", `/v1/mock-apis/${m.id}/requests`);
+    }
+  };
+  await resetMocks();
+  ok("state and request logs reset, so the demo starts clean");
 
   if (args.verify) {
     step("Verifying with the Arazzo journeys (this sends a few webhooks to the webhook target)");
@@ -333,22 +398,22 @@ async function main() {
     const lines = (run.stdout || "").split("\n").filter((l) => /^[✓✗]/.test(l));
     lines.forEach((l) => log(`    ${l}`));
     if (!lines.length || lines.some((l) => l.startsWith("✗"))) throw new Error(`Arazzo journeys failed:\n${(run.stdout || "") + (run.stderr || "")}`);
-    for (const m of [pay, cart]) {
-      await api("POST", `/v1/mock-apis/${m.id}/scenarios/reset`);
-      await api("DELETE", `/v1/mock-apis/${m.id}/requests`);
-    }
-    ok("state and request logs reset, so the demo starts clean");
+    await resetMocks();
+    ok("state and request logs reset again after the journeys");
   }
 
   step(`Configuring the app (${args.envFile.startsWith(ROOT + path.sep) ? path.relative(ROOT, args.envFile) : args.envFile})`);
   fs.mkdirSync(path.dirname(args.envFile), { recursive: true });
   const updates = { PAYMENTS_URL: payUrl, CART_URL: cartUrl, PAYMENTS_MOCK_API_ID: pay.id, CART_MOCK_API_ID: cart.id };
   if (args.webhookUrl) updates.WEBHOOK_URL = args.webhookUrl;
-  for (const [k, from, to] of updateEnvFile(args.envFile, updates)) ok(`${k}: ${from === null ? "(added)" : from || "(empty)"} -> ${to}`);
+  const envChanges = updateEnvFile(args.envFile, updates).map(([key, previous, written]) => ({ key, previous, written }));
+  for (const c of envChanges) ok(`${c.key}: ${c.previous === null ? "(added)" : c.previous || "(empty)"} -> ${c.written}`);
 
   fs.writeFileSync(STATE_FILE, JSON.stringify({
     environmentId: env.id, environmentName: envName, dataSourceId: ds.id, paymentsMockApiId: pay.id, cartMockApiId: cart.id,
     paymentsUrl: payUrl, cartUrl, createdAt: new Date().toISOString(),
+    // what setup wrote to the env file, so --teardown can put it back
+    envFile: args.envFile, envChanges,
   }, null, 2) + "\n");
   return { port, payUrl, cartUrl, payId: pay.id, cartId: cart.id, envId: env.id, envName };
 }

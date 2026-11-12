@@ -30,6 +30,10 @@ let nextCartNo = 1;
 const CLEARED_KEY = "paymentsDemo.clearedEvents";
 const cleared = new Set(JSON.parse(localStorage.getItem(CLEARED_KEY) || "[]"));
 const shown = new Set();
+// Payments made in sessions that "New demo" has since closed. A webhook for one of them can be delivered
+// a moment after the click, so events are hidden by payment as well as by event id.
+const CLEARED_PAY_KEY = "paymentsDemo.clearedPayments";
+const clearedPayments = new Set(JSON.parse(localStorage.getItem(CLEARED_PAY_KEY) || "[]"));
 let latestEvents = [];
 let firstFeed = true;
 
@@ -238,11 +242,16 @@ function render() {
   const cur = c.currency;
 
   // products: "Add" is disabled once this cart has been checked out
-  $("products").className = "";
-  $("products").innerHTML = products
-    .map((p) => `<div class="row"><div><strong>${esc(p.name)}</strong><br><span class="muted">${esc(p.category)} &middot; ${p.price.toFixed(2)} USD</span></div>
-      <button data-add="${esc(p.id)}" ${c.checkedOut ? "disabled" : ""}>Add</button></div>`)
-    .join("");
+  if (!cfg.configured) {
+    $("products").className = "muted";
+    $("products").textContent = "Not available until the demo mocks are configured (see the notice above).";
+  } else {
+    $("products").className = "";
+    $("products").innerHTML = products
+      .map((p) => `<div class="row"><div><strong>${esc(p.name)}</strong><br><span class="muted">${esc(p.category)} &middot; ${p.price.toFixed(2)} USD</span></div>
+        <button data-add="${esc(p.id)}" ${c.checkedOut ? "disabled" : ""}>Add</button></div>`)
+      .join("");
+  }
   document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => addToCart(b.dataset.add)));
 
   // cart
@@ -393,6 +402,18 @@ function showReceiverNote() {
   $("feedStatus").textContent = "";
 }
 
+// The payment an event belongs to: the payment itself for payment.*, `paymentId` for refund.*.
+const eventPaymentId = (e) => { const d = (e.payload && e.payload.data) || {}; return d.paymentId || d.id; };
+const isHidden = (e) => cleared.has(e.uuid) || clearedPayments.has(eventPaymentId(e));
+
+function renderEvents(newOnes = new Set()) {
+  const visible = latestEvents.filter((e) => e.payload && e.payload.type && !isHidden(e));
+  $("events").innerHTML = visible.length
+    ? visible.map((e) => eventHtml(e, newOnes.has(e.uuid))).join("")
+    : `<div class="muted">No events yet. Pay or refund to trigger one.</div>`;
+  return visible;
+}
+
 async function pollFeed() {
   if (cfg.webhookMode !== "site") return; // nothing to read back (see showReceiverNote)
   let feed;
@@ -405,19 +426,48 @@ async function pollFeed() {
   }
   feedState(feed.status);
   latestEvents = feed.events;
-  const fresh = feed.events.filter((e) => e.payload && e.payload.type && !cleared.has(e.uuid));
+  const fresh = latestEvents.filter((e) => e.payload && e.payload.type && !isHidden(e));
   // Flash only events that arrive while the page is open, not the ones already there on load.
   const newOnes = firstFeed ? new Set() : new Set(fresh.filter((e) => !shown.has(e.uuid)).map((e) => e.uuid));
   fresh.forEach((e) => shown.add(e.uuid));
   if (feed.status === "ok") firstFeed = false;
-  $("events").innerHTML = fresh.length
-    ? fresh.map((e) => eventHtml(e, newOnes.has(e.uuid))).join("")
-    : `<div class="muted">No events yet. Pay or refund to trigger one.</div>`;
+  renderEvents(newOnes);
 }
 
 // ---------------------------------------------------------------- clear the webhook.site log
 // Unlike "New demo" (which only hides events in this browser), this deletes every request stored
 // on the webhook.site URL, for everyone. Needs WEBHOOK_API_KEY on the server.
+// Ask the server to delete every request stored on the webhook.site URL. Resolves to null on success,
+// otherwise to a short error text. Used by the "Clear webhook.site log" button and by "New demo".
+async function clearWebhookSiteLog() {
+  try {
+    const res = await fetch("/api/webhooks/clear", { method: "POST", headers: { "X-Requested-With": "payments-demo" } });
+    const body = await res.json().catch(() => ({}));
+    return res.ok ? null : String(body.error || res.status);
+  } catch (e) {
+    return e.message;
+  }
+}
+
+// Hide the events currently on screen (by event id), right away.
+function hideShownEvents() {
+  latestEvents.forEach((e) => cleared.add(e.uuid));
+  shown.forEach((u) => cleared.add(u));
+  localStorage.setItem(CLEARED_KEY, JSON.stringify([...cleared].slice(-500)));
+  if (cfg.webhookMode === "site") renderEvents();
+}
+
+// After the webhook.site log has been deleted upstream there is nothing left to hide, so the local
+// "hidden" bookkeeping no longer means anything.
+function forgetHiddenEvents() {
+  cleared.clear();
+  shown.clear();
+  latestEvents = [];
+  firstFeed = true;
+  localStorage.removeItem(CLEARED_KEY);
+}
+
+// The "Clear webhook.site log" button: only the log, nothing else (use "New demo" for a full reset).
 async function clearWebhookLog() {
   if (!cfg.canClearWebhooks) {
     return alert("Clearing the webhook.site log needs WEBHOOK_API_KEY set on the server (see app/.env.example).");
@@ -425,40 +475,39 @@ async function clearWebhookLog() {
   const ok = confirm(
     "Permanently delete ALL requests stored on webhook.site for this URL?\n\n" +
     "This cannot be undone and affects everyone looking at that page.\n" +
-    "(To just start a fresh demo view, use \"New demo\" instead.)"
+    "(\"New demo\" also clears it, as part of starting over.)"
   );
   if (!ok) return;
   const btn = $("btnClearHooks");
   btn.disabled = true;
-  try {
-    const res = await fetch("/api/webhooks/clear", { method: "POST", headers: { "X-Requested-With": "payments-demo" } });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || res.status);
-    // Everything is gone upstream, so the local "hidden" list no longer means anything.
-    cleared.clear();
-    shown.clear();
-    latestEvents = [];
-    firstFeed = true;
-    localStorage.removeItem(CLEARED_KEY);
+  const err = await clearWebhookSiteLog();
+  if (err) alert(`Could not clear the webhook.site log: ${err}`);
+  else {
+    forgetHiddenEvents();
+    clearedPayments.clear();
+    localStorage.removeItem(CLEARED_PAY_KEY);
     await pollFeed();
-  } catch (e) {
-    alert(`Could not clear the webhook.site log: ${e.message}`);
-  } finally {
-    btn.disabled = false;
   }
+  btn.disabled = false;
 }
 
 // ---------------------------------------------------------------- lifecycle
 // Local reset: one fresh cart, empty call log, webhook feed hidden (events stay on webhook.site).
 function resetLocal() {
+  const oldCarts = carts;
   nextCartNo = 1;
   session = freshSession();
   carts = [session];
+  // Capture the payments of the session being closed BEFORE it is replaced below.
+  oldCarts.forEach((c) => { if (c.payment && c.payment.id) clearedPayments.add(c.payment.id); });
   latestEvents.forEach((e) => cleared.add(e.uuid));
   shown.forEach((u) => cleared.add(u));
   localStorage.setItem(CLEARED_KEY, JSON.stringify([...cleared].slice(-500)));
+  localStorage.setItem(CLEARED_PAY_KEY, JSON.stringify([...clearedPayments].slice(-200)));
   $("log").innerHTML = "";
   render();
+  // Redraw the webhook panel right now: do not wait for (or depend on) the next poll to show it cleared.
+  if (cfg.webhookMode === "site") renderEvents();
   pollFeed();
 }
 
@@ -476,30 +525,38 @@ async function newDemo() {
   resetting = true;
   document.body.classList.add("busy");
   $("btnReset").disabled = true;
-  let text, bad = false;
-  if (!cfg.canResetMocks) {
-    text = "Mock APIs not reset: set WMC_API_KEY in app/.env";
-    bad = true;
-  } else {
-    resetStatus("Resetting mock APIs...", false);
+  hideShownEvents(); // the webhook list empties the moment you click, not when the slow steps finish
+  resetStatus("Resetting...", false);
+
+  const resetMocksPart = async () => {
+    if (!cfg.canResetMocks) {
+      return { bad: true, text: cfg.resetBlocker === "not-configured"
+        ? "Mock APIs not reset: no demo mocks are configured (run ./demo-setup.sh)"
+        : "Mock APIs not reset: set WMC_API_KEY in app/.env" };
+    }
     try {
       const res = await fetch("/api/reset-mocks", { method: "POST", headers: { "X-Requested-With": "payments-demo" } });
       const body = await res.json().catch(() => ({}));
-      if (res.ok) {
-        text = "Mock state and request logs reset";
-      } else {
-        bad = true;
-        const failed = (body.results || []).filter((r) => r.state !== "ok" || r.requestLog !== "ok")
-          .map((r) => `${r.mock}: ${r.state !== "ok" ? "state " + r.state : "request log " + r.requestLog}`);
-        text = `Mock reset failed: ${failed.join("; ") || body.error || res.status}`;
-      }
+      if (res.ok) return { bad: false, text: "Mock state and request logs reset" };
+      const failed = (body.results || []).filter((r) => r.state !== "ok" || r.requestLog !== "ok")
+        .map((r) => `${r.mock}: ${r.state !== "ok" ? "state " + r.state : "request log " + r.requestLog}`);
+      return { bad: true, text: `Mock reset failed: ${failed.join("; ") || body.error || res.status}` };
     } catch (e) {
-      bad = true;
-      text = `Mock reset failed: ${e.message}`;
+      return { bad: true, text: `Mock reset failed: ${e.message}` };
     }
-  }
+  };
+  // A webhook.site target with an API key is cleared too; with any other receiver there is nothing to clear.
+  const clearHooksPart = async () => {
+    if (!cfg.canClearWebhooks) return null;
+    const err = await clearWebhookSiteLog();
+    return err ? { bad: true, text: `webhook.site log not cleared: ${err}` } : { bad: false, text: "webhook.site log cleared" };
+  };
+
+  const [mocks, hooks] = await Promise.all([resetMocksPart(), clearHooksPart()]);
+  if (hooks && !hooks.bad) forgetHiddenEvents(); // deleted upstream: nothing left to hide
   resetLocal();
-  resetStatus(text, bad);
+  const parts = [mocks, hooks].filter(Boolean);
+  resetStatus(parts.map((p) => p.text).join("; "), parts.some((p) => p.bad));
   resetting = false;
   document.body.classList.remove("busy");
   $("btnReset").disabled = false;
@@ -516,7 +573,9 @@ async function init() {
     hookLink.hidden = false;
   }
   if (cfg.webhookMode !== "site") showReceiverNote();
-  $("lnkCart").href = `${cfg.cartUrl}/products`;
+  $("setupBanner").hidden = cfg.configured;
+  if (cfg.configured) $("lnkCart").href = `${cfg.cartUrl}/products`;
+  else $("lnkCart").hidden = true;
   $("card").innerHTML = CARDS.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("");
   session = freshSession();
   carts = [session];
@@ -528,6 +587,8 @@ async function init() {
   $("btnRefundAll").onclick = () => doRefund(session, refundRemaining(session.payment));
   $("btnOver").onclick = () => doRefund(session, session.payment.amount - session.payment.amountRefunded + 100);
   $("btnReset").onclick = newDemo;
+  $("btnReset").title = "Start over: resets the mock APIs' state and request logs" +
+    (cfg.canClearWebhooks ? ", clears the webhook.site log" : "") + ", and resets the page";
   $("btnClearHooks").onclick = clearWebhookLog;
   // "Clear webhook.site log" only makes sense for a webhook.site target; it needs the API key.
   const clearBtn = $("btnClearHooks");
@@ -538,7 +599,7 @@ async function init() {
   $("refundAmt").oninput = () => (session.refundAmt = $("refundAmt").value);
 
   render();
-  await Promise.all([loadProducts(), pollFeed()]);
+  await Promise.all([cfg.configured ? loadProducts() : Promise.resolve(), pollFeed()]);
   setInterval(pollFeed, 3000);
 }
 

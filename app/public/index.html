@@ -66,6 +66,8 @@
   .reset-status { margin-left: 16px; font-size: 12px; color: #b8c6e8; }
   .reset-status.bad { color: #ffb4ae; }
   body.busy main, body.busy .tabs { pointer-events: none; opacity: .55; }
+  .banner { margin: 12px 20px 0; padding: 10px 14px; border-radius: 8px; background: var(--warnbg); color: var(--warn); border: 1px solid #ecd19a; font-size: 13px; line-height: 1.5; }
+  .banner code { background: #fff7e3; padding: 0 4px; border-radius: 3px; }
   .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 20px 0; }
   .tab { padding: 6px 12px; border-radius: 8px; }
   .tab.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--infobg); font-weight: 600; }
@@ -88,11 +90,17 @@
     <a id="lnkWebhook" href="#" target="_blank" rel="noopener" hidden>Webhook log &#8599;</a>
     <a id="lnkCart" href="#" target="_blank" rel="noopener">Cart API &#8599;</a>
     <span id="resetStatus" class="reset-status" role="status"></span>
-    <button id="btnReset" style="margin-left:16px" title="Start over: resets the mock APIs' state and request logs, and hides the webhook events">New demo</button>
+    <button id="btnReset" style="margin-left:16px" title="Start over: resets the mock APIs' state and request logs and the page">New demo</button>
     <button id="btnClearHooks" class="danger" style="margin-left:8px" title="Permanently delete every request stored on webhook.site" hidden>Clear webhook.site log</button>
   </div>
 </header>
 
+<div id="setupBanner" class="banner" hidden>
+  <strong>The demo mocks are not configured.</strong>
+  Run <code>./demo-setup.sh</code> from the project folder: it provisions the WireMock Cloud mocks and writes
+  <code>PAYMENTS_URL</code>, <code>CART_URL</code>, <code>PAYMENTS_MOCK_API_ID</code> and <code>CART_MOCK_API_ID</code>
+  into <code>app/.env</code>, then restart this app. Or set those four variables yourself.
+</div>
 <nav id="tabs" class="tabs"></nav>
 
 <main>

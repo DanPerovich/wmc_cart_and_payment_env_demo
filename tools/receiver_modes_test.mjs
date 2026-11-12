@@ -5,6 +5,14 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import net from "node:net";
+// Refuse to run if a test port is taken: otherwise the test would silently talk to a stale server.
+const assertPortsFree = async (ports) => {
+  for (const p of ports) {
+    const free = await new Promise((r) => { const s = net.createServer().once("error", () => r(false)).once("listening", () => s.close(() => r(true))); s.listen(p, "0.0.0.0"); });
+    if (!free) { console.error(`port ${p} is already in use (a leftover test process?). Stop it and re-run; otherwise this test would talk to a stale server.`); process.exit(2); }
+  }
+};
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const APP = path.join(here, "..", "app", "server.js");
@@ -21,6 +29,7 @@ const H = (port) => ({ "X-Requested-With": "payments-demo", Origin: `http://loca
 const fakeLog = async () => (await fetch(`http://localhost:${FAKE_PORT}/__log`)).json();
 
 try {
+  await assertPortsFree([8782, 8771, 8772, 8773, 8774, 8775]);
   start(FAKE, [String(FAKE_PORT), KEY], {});
   await sleep(500);
 

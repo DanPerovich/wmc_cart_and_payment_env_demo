@@ -24,20 +24,27 @@ const deletes = async () => (await (await fetch(fakeUrl + "/__log")).json()).fil
 const expect = (label, cond) => { if (!cond) throw new Error("FAILED: " + label); console.log("ok  ", label); };
 
 try {
-  await fetch(fakeUrl + "/__seed");
+  await fetch(fakeUrl + "/__seed");   // also empties the fake's call log
   await sleep(1500);
   await until("both seeded events are shown", `${evCount} === 2`);
   await run(`window.alertMsg = null; window.alert = (m) => { window.alertMsg = m; }`);
+  const feedEvents = async () => (await (await fetch(appUrl + "api/webhooks")).json()).events.length;
 
-  // 1) New demo only hides events in this browser: no DELETE reaches webhook.site
-  await run(`document.getElementById('btnReset').click()`);
-  await until("New demo hides the events", `${evCount} === 0`);
-  expect("New demo sent no DELETE to webhook.site", (await deletes()) === 0);
+  // 1) New demo is a full reset: it also deletes the webhook.site log (one authenticated DELETE)
+  const sync = await run(`(() => { document.getElementById('btnReset').click(); return ${evCount}; })()`);
+  expect("the panel is empty in the same tick as the click", sync === 0);
+  for (let i = 0; i < 20 && (await deletes()) === 0; i++) await sleep(250);
+  expect("New demo deleted the webhook.site log: exactly one DELETE", (await deletes()) === 1);
+  await until("New demo finished", `!document.body.classList.contains('busy')`);
+  expect("status line reports the webhook.site log was cleared", (await run(`document.getElementById('resetStatus').textContent`)).includes("webhook.site log cleared"));
+  expect("nothing is left upstream", (await feedEvents()) === 0);
   await cdp("Page.reload"); await sleep(1500);
-  await until("hidden events stay hidden after reload", `${evCount} === 0`);
-  expect("hidden list is stored in localStorage", await run(`!!localStorage.getItem('paymentsDemo.clearedEvents')`));
+  await until("still empty after reload", `${evCount} === 0`);
+  expect("the local hidden list was reset (it is meaningless once the log is gone)", await run(`JSON.parse(localStorage.getItem('paymentsDemo.clearedEvents') || '[]').length === 0`));
+  await fetch(fakeUrl + "/__seed");
+  await until("events that arrive afterwards show normally", `${evCount} === 2`);
 
-  // 2) Clear webhook.site log: cancelling the confirm does nothing
+  // 2) the separate Clear button: cancelling the confirm does nothing
   await run(`window.alertMsg = null; window.alert = (m) => { window.alertMsg = m; }`); // reload dropped the override
   await run(`window.confirm = () => false; document.getElementById('btnClearHooks').click()`);
   await sleep(800);
@@ -45,16 +52,24 @@ try {
 
   // 3) confirming deletes upstream and resets the local hidden list
   await run(`window.confirm = (m) => { window.confirmMsg = m; return true; }; document.getElementById('btnClearHooks').click()`);
-  await until("confirmed clear sent exactly one DELETE", `true`);
   for (let i = 0; i < 20 && (await deletes()) === 0; i++) await sleep(250);
   expect("exactly one DELETE reached webhook.site", (await deletes()) === 1);
   expect("confirm text warns it is permanent", (await run(`window.confirmMsg`)).includes("Permanently delete ALL"));
-  await until("local hidden list was reset", `localStorage.getItem('paymentsDemo.clearedEvents') === null`);
+  await until("the list is empty", `${evCount} === 0`);
   expect("no error alert was shown", (await run(`window.alertMsg`)) === null);
 
-  // 4) after the upstream wipe, newly arriving events show again (not suppressed by the old hidden list)
+  // 4) a New demo whose webhook.site deletion fails: reported, events stay hidden, the page still resets
   await fetch(fakeUrl + "/__seed");
-  await until("re-seeded events appear after a clear", `${evCount} === 2`);
+  await until("events are shown again", `${evCount} === 2`);
+  await fetch(fakeUrl + "/__fail?on=1");
+  await run(`document.getElementById('btnReset').click()`);
+  await until("New demo finished", `!document.body.classList.contains('busy')`, 15000);
+  const st = await run(`({ text: document.getElementById('resetStatus').textContent, bad: document.getElementById('resetStatus').classList.contains('bad'), tabs: document.querySelectorAll('.tab').length })`);
+  expect("a failed deletion is reported in the status line", /webhook\.site log not cleared/.test(st.text) && st.bad);
+  expect("the page was still reset", st.tabs === 1);
+  await sleep(4000);
+  expect("the events stay hidden even though upstream still has them", (await run(evCount)) === 0 && (await feedEvents()) === 2);
+  await fetch(fakeUrl + "/__fail?on=0");
   console.log("ALL CLEAR-LOG UI STEPS PASSED");
 } catch (e) { console.error(String(e.message || e)); process.exitCode = 1; }
 finally { ws.close(); chrome.kill(); }

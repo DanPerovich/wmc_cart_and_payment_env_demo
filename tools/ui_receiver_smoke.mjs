@@ -6,6 +6,14 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import net from "node:net";
+// Refuse to run if a test port is taken: otherwise the test would silently talk to a stale server.
+const assertPortsFree = async (ports) => {
+  for (const p of ports) {
+    const free = await new Promise((r) => { const s = net.createServer().once("error", () => r(false)).once("listening", () => s.close(() => r(true))); s.listen(p, "0.0.0.0"); });
+    if (!free) { console.error(`port ${p} is already in use (a leftover test process?). Stop it and re-run; otherwise this test would talk to a stale server.`); process.exit(2); }
+  }
+};
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const APP = path.join(here, "..", "app", "server.js"), FAKE = path.join(here, "fake_webhook_site.mjs");
@@ -28,6 +36,7 @@ const chromePort = 9336;
 const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${chromePort}`, `--user-data-dir=${mkdtempSync(path.join(tmpdir(), "uirecv-"))}`, "--window-size=1500,900", "--no-first-run", "about:blank"], { stdio: "ignore" });
 let ws;
 try {
+  await assertPortsFree([8782, 8771, 8772, 8773, 8774]);
   start(FAKE, [String(FAKE_PORT), KEY], {});
   for (const m of modes) start(APP, [], { ...base, ...m.env, PORT: String(m.port) });
   await sleep(1500);

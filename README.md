@@ -14,17 +14,21 @@ Needs Node 18+ and `WMC_API_KEY` in `app/.env` (copy `app/.env.example`). The sc
 2. sets their OpenAPI settings and creates the `Test Cards` data source from the CSV,
 3. loads the OpenAPI descriptions and stubs from `.wiremock/` (payments stubs are pointed at the new
    data source; nothing in the repository is modified),
-4. waits for the new hostnames to resolve (**about 80 seconds**, that is how long WireMock Cloud's DNS takes),
-   smoke-tests both mocks,
+4. waits for the new hostnames to resolve (**anywhere from a few seconds to several minutes**: new names have
+   no DNS record until WireMock Cloud creates one, and your resolver may cache the miss), smoke-tests both
+   mocks (retrying briefly, since a brand-new mock can answer oddly for a few seconds), then resets their
+   state and request logs so the demo starts clean,
 5. rewrites `PAYMENTS_URL`, `CART_URL`, `PAYMENTS_MOCK_API_ID` and `CART_MOCK_API_ID` in `app/.env`
-   (every other line, including your keys, is left alone), then
+   (every other line, including your keys, is left alone; what it changed is recorded so `--teardown` can
+   undo it), then
 6. starts the app (Ctrl+C stops it).
 
 Options: `--name <env name>`, `--no-start`, `--port <n>`, `--restart` (stop an app already running on the
 port, only if it is this repo's `server.js`), `--webhook-url <url>` (target baked into the payments
 stubs), `--keep-previous`, `--keep-on-failure`, `--env-file <path>`; see `./demo-setup.sh --help`.
 It records what it created in `.wiremock/.demo-environment.json` (git-ignored) so `--teardown` removes
-exactly that; it refuses to run again until you tear down (or pass `--keep-previous`), and if a step
+exactly that, **and restores `app/.env`**: each of the lines setup wrote goes back to its previous value (or is
+removed if setup added it), unless you have edited it since, in which case it is left alone and reported; it refuses to run again until you tear down (or pass `--keep-previous`), and if a step
 fails it deletes what that run created. Each run adds a **new** environment: your existing mocks are
 never modified.
 
@@ -79,4 +83,4 @@ npx @wiremock/arazzo-runner@1.4.0 run .wiremock/payments-api/arazzo.yaml \
 ## Not in the repository (by design)
 - **Secrets**: `app/.env` (`WMC_API_KEY`, and optionally `WEBHOOK_API_KEY`). `.gitignore` excludes it; `app/.env.example` is the template.
 - **The webhook receiver**: webhooks go to `WEBHOOK_URL`, by default WireMock Cloud's free echo service (`https://wc-echo.wiremockapi.cloud/webhook/echo`), which stores nothing. To list events in the app and use *Clear webhook.site log*, point `WEBHOOK_URL` at a webhook.site address and set `WEBHOOK_API_KEY`: reading a webhook.site log through its API needs that key, a webhook.site **paid-account** feature. See `app/README.md`.
-- **WMC state**: payments/carts/orders exist only at runtime and are reset by the app's *New demo* button.
+- **WMC state**: payments/carts/orders exist only at runtime and are reset by the app's *New demo* button (which also clears the webhook.site log when that is the webhook target and `WEBHOOK_API_KEY` is set).
